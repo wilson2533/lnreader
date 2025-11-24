@@ -37,7 +37,7 @@
   "appearanceScreen": {
     "accentColor": "Save anyway",
     "alwaysShowNavLabels": "",
-    "appLanguage": "App language",
+    "appLanguage": "",
     "languagePickerModal": {
       "title": "Select Language",
       "restartNote": "You will need to restart the app for the language change to take full effect."
