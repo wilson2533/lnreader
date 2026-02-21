@@ -3,7 +3,7 @@ import { enableFreeze } from 'react-native-screens';
 
 enableFreeze(true);
 
-import React, { useEffect } from 'react';
+import React, { Suspense, useEffect } from 'react';
 import { StatusBar, StyleSheet } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import LottieSplashScreen from 'react-native-lottie-splash-screen';
@@ -14,10 +14,10 @@ import * as Notifications from 'expo-notifications';
 import AppErrorBoundary, {
   ErrorFallback,
 } from '@components/AppErrorBoundary/AppErrorBoundary';
-import { useDatabaseInitialization } from '@hooks';
 
 import Main from './src/navigators/Main';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
+import { useInitDatabase } from '@database/db';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => {
@@ -30,86 +30,35 @@ Notifications.setNotificationHandler({
   },
 });
 
-Notifications.setNotificationCategoryAsync('TTS_CONTROLS', [
-  {
-    identifier: 'TTS_PLAY_PAUSE',
-    buttonTitle: '▶️ Play',
-    options: {
-      opensAppToForeground: false,
-    },
-  },
-  {
-    identifier: 'TTS_STOP',
-    buttonTitle: '⏹️ Stop',
-    options: {
-      opensAppToForeground: false,
-    },
-  },
-  {
-    identifier: 'TTS_NEXT',
-    buttonTitle: '⏭️ Next',
-    options: {
-      opensAppToForeground: false,
-    },
-  },
-]);
-
-Notifications.setNotificationChannelAsync('tts-controls', {
-  name: 'TTS Controls',
-  description: 'Text-to-Speech playback controls',
-  importance: Notifications.AndroidImportance.HIGH,
-  vibrationPattern: [],
-  enableLights: false,
-  enableVibrate: false,
-});
 
 const App = () => {
-  const { isDbReady, dbError, retryInitialization } =
-    useDatabaseInitialization();
+  const state = useInitDatabase();
 
   useEffect(() => {
-    if (isDbReady || dbError) {
+    if (state.success || state.error) {
       LottieSplashScreen.hide();
     }
-  }, [isDbReady, dbError]);
+  }, [state.success, state.error]);
 
-  useEffect(() => {
-    const subscription = Notifications.addNotificationResponseReceivedListener(
-      response => {
-        const actionIdentifier = response.actionIdentifier;
-        if (actionIdentifier.startsWith('TTS_')) {
-          const { setTTSAction } = require('@utils/ttsNotification');
-          setTTSAction(actionIdentifier);
-        }
-      },
-    );
-
-    return () => {
-      subscription.remove();
-    };
-  }, []);
-
-  if (dbError) {
-    return <ErrorFallback error={dbError} resetError={retryInitialization} />;
-  }
-
-  if (!isDbReady) {
-    return null;
+  if (state.error) {
+    return <ErrorFallback error={state.error} resetError={() => null} />;
   }
 
   return (
-    <GestureHandlerRootView style={styles.flex}>
-      <AppErrorBoundary>
-        <SafeAreaProvider>
-          <PaperProvider>
-            <BottomSheetModalProvider>
-              <StatusBar translucent={true} backgroundColor="transparent" />
-              <Main />
-            </BottomSheetModalProvider>
-          </PaperProvider>
-        </SafeAreaProvider>
-      </AppErrorBoundary>
-    </GestureHandlerRootView>
+    <Suspense fallback={null}>
+      <GestureHandlerRootView style={styles.flex}>
+        <AppErrorBoundary>
+          <SafeAreaProvider>
+            <PaperProvider>
+              <BottomSheetModalProvider>
+                <StatusBar translucent={true} backgroundColor="transparent" />
+                <Main />
+              </BottomSheetModalProvider>
+            </PaperProvider>
+          </SafeAreaProvider>
+        </AppErrorBoundary>
+      </GestureHandlerRootView>
+    </Suspense>
   );
 };
 
