@@ -1,0 +1,78 @@
+name: 🔄 Sync Fork Robusto
+
+on:
+  schedule:
+    # Ejecutar cada 10 minutos
+    - cron: '*/10 * * * *'
+  # Permitir ejecución manual desde la interfaz de GitHub
+  workflow_dispatch:
+  # Opcional: también se activa cuando hay cambios en el upstream (requiere webhook)
+  repository_dispatch:
+    types: [sync-upstream]
+
+# Permisos necesarios para escribir en el repositorio
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    name: Sincronizar fork con upstream
+    
+    steps:
+      # 1. Verificar el repositorio actual
+      - name: 📥 Checkout del fork
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+          
+      # 2. Configurar información del usuario
+      - name: 👤 Configurar git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+      # 3. Agregar upstream (repositorio original)
+      - name: 🔗 Agregar upstream
+        run: |
+          git remote add upstream https://github.com/lnreader/lnreader.git
+          git fetch upstream
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          
+      # 4. Sincronizar rama principal con manejo de conflictos
+      - name: ⚡ Sincronizar rama main
+        id: sync_main
+        continue-on-error: true
+        run: |
+          git checkout main
+          git pull upstream main --no-rebase
+          git push origin main
+          echo "status=sincronizado" >> $GITHUB_OUTPUT
+          
+      # 5. Si hay conflictos, crear un Pull Request para revisión manual
+      - name: 🔧 Manejar conflictos
+        if: steps.sync_main.outcome == 'failure'
+        run: |
+          echo "⚠️ Se detectaron conflictos. Creando rama temporal..."
+          git checkout -b sync-conflict-$(date +%Y%m%d-%H%M%S)
+          git push origin sync-conflict-*
+          gh pr create \
+            --title "🔄 Sincronización manual requerida" \
+            --body "Hubo conflictos al sincronizar automáticamente. Por favor, resuélvelos manualmente." \
+            --base main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          
+      # 6. Notificar resultado (opcional - para Discord/Telegram)
+      - name: 📢 Notificar éxito
+        if: success()
+        run: |
+          echo "✅ Fork sincronizado correctamente a las $(date)"
+          
+      - name: ⚠️ Notificar fallo
+        if: failure()
+        run: |
+          echo "❌ Falló la sincronización a las $(date). Revisa los logs."
