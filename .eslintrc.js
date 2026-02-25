@@ -1,11 +1,12 @@
 module.exports = {
   root: true,
-  plugins: ['jest'],
-  extends: ['@react-native', 'plugin:jest/recommended'],
-
+  extends: ['@react-native'],
   overrides: [
     {
-      files: ['**/__tests__/**', '**/*.test.*', '**/*.spec.*'],
+      // Test files only
+      plugins: ['jest'],
+      files: ['**/__tests__/**/*.[jt]s?(x)', '**/?(*.)+(spec|test).[jt]s?(x)'],
+      extends: ['plugin:testing-library/react', 'plugin:jest/recommended'],
     },
     {
       files: ['*.js', '*.jsx', '*.ts', '*.tsx'],
