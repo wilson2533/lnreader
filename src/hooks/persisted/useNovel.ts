@@ -1,47 +1,47 @@
 /* eslint-disable no-console */
-import { useMMKVNumber, useMMKVObject } from 'react-native-mmkv';
-import { ChapterInfo, NovelInfo } from '@database/types';
-import { MMKVStorage } from '@utils/mmkv/mmkv';
-import { TRACKED_NOVEL_PREFIX } from './useTrackedNovel';
-import { ChapterOrderKey, ChapterFilterKey } from '@database/constants';
-import {
-  getNovelByPath,
-  deleteCachedNovels as _deleteCachedNovels,
-  getCachedNovels as _getCachedNovels,
-  insertNovelAndChapters,
-} from '@database/queries/NovelQueries';
+import { useLibraryContext } from '@components/Context/LibraryContext';
+import { ChapterFilterKey, ChapterOrderKey } from '@database/constants';
 import {
   bookmarkChapter as _bookmarkChapter,
-  markChapterRead as _markChapterRead,
-  markChaptersRead as _markChaptersRead,
-  markPreviuschaptersRead as _markPreviuschaptersRead,
-  markPreviousChaptersUnread as _markPreviousChaptersUnread,
-  markChaptersUnread as _markChaptersUnread,
   deleteChapter as _deleteChapter,
   deleteChapters as _deleteChapters,
-  getPageChapters as _getPageChapters,
-  insertChapters,
-  getCustomPages,
-  getChapterCount,
-  getPageChaptersBatched,
   getFirstUnreadChapter as _getFirstUnreadChapter,
+  getPageChapters as _getPageChapters,
+  markChapterRead as _markChapterRead,
+  markChaptersRead as _markChaptersRead,
+  markChaptersUnread as _markChaptersUnread,
+  markPreviousChaptersUnread as _markPreviousChaptersUnread,
+  markPreviuschaptersRead as _markPreviuschaptersRead,
   updateChapterProgress as _updateChapterProgress,
+  getChapterCount,
+  getCustomPages,
+  getPageChaptersBatched,
+  insertChapters,
 } from '@database/queries/ChapterQueries';
+import {
+  deleteCachedNovels as _deleteCachedNovels,
+  getCachedNovels as _getCachedNovels,
+  getNovelByPath,
+  insertNovelAndChapters,
+} from '@database/queries/NovelQueries';
+import { ChapterInfo, NovelInfo } from '@database/types';
 import { fetchNovel, fetchPage } from '@services/plugin/fetch';
-import { showToast } from '@utils/showToast';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { getString } from '@strings/translations';
-import dayjs from 'dayjs';
-import { parseChapterNumber } from '@utils/parseChapterNumber';
-import { NOVEL_STORAGE } from '@utils/Storages';
-import { useAppSettings } from './useSettings';
 import NativeFile from '@specs/NativeFile';
-import { useLibraryContext } from '@components/Context/LibraryContext';
+import { getString } from '@strings/translations';
+import { MMKVStorage } from '@utils/mmkv/mmkv';
+import { parseChapterNumber } from '@utils/parseChapterNumber';
+import { showToast } from '@utils/showToast';
+import { NOVEL_STORAGE } from '@utils/Storages';
+import dayjs from 'dayjs';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useMMKVNumber, useMMKVObject } from 'react-native-mmkv';
+import { useAppSettings } from './useSettings';
+import { TRACKED_NOVEL_PREFIX } from './useTrackedNovel';
 
 // #region constants
 
 export const NOVEL_PAGE_INDEX_PREFIX = 'NOVEL_PAGE_INDEX_PREFIX';
-export const NOVEL_SETTINSG_PREFIX = 'NOVEL_SETTINGS';
+export const NOVEL_SETTINGS_PREFIX = 'NOVEL_SETTINGS';
 export const LAST_READ_PREFIX = 'LAST_READ_PREFIX';
 
 const defaultNovelSettings: NovelSettings = {
@@ -70,7 +70,7 @@ export const useNovel = (novelOrPath: string | NovelInfo, pluginId: string) => {
     typeof novelOrPath === 'object' ? novelOrPath : undefined,
   );
   const [pages, setPages] = useState<string[]>(() => {
-    if (novel && novel.totalPages > 0) {
+    if (novel && (novel.totalPages ?? 0) > 0) {
       const tmpPages = Array(novel.totalPages)
         .fill(0)
         .map((_, idx) => String(idx + 1));
@@ -83,9 +83,9 @@ export const useNovel = (novelOrPath: string | NovelInfo, pluginId: string) => {
 
   const novelPath = novel?.path ?? (novelOrPath as string);
 
-  const [pageIndex = defaultPageIndex, setPageIndex] = useMMKVNumber(`
-    ${NOVEL_PAGE_INDEX_PREFIX}_${pluginId}_${novelPath}
-    `);
+  const [pageIndex = defaultPageIndex, setPageIndex] = useMMKVNumber(
+    `${NOVEL_PAGE_INDEX_PREFIX}_${pluginId}_${novelPath}`,
+  );
   const currentPage = pages[pageIndex];
 
   const [lastRead, setLastRead] = useMMKVObject<ChapterInfo>(
@@ -93,7 +93,7 @@ export const useNovel = (novelOrPath: string | NovelInfo, pluginId: string) => {
   );
   const [novelSettings = defaultNovelSettings, _setNovelSettings] =
     useMMKVObject<NovelSettings>(
-      `${NOVEL_SETTINSG_PREFIX}_${pluginId}_${novelPath}`,
+      `${NOVEL_SETTINGS_PREFIX}_${pluginId}_${novelPath}`,
     );
 
   const [chapters, _setChapters] = useState<ChapterInfo[]>([]);
@@ -211,14 +211,14 @@ export const useNovel = (novelOrPath: string | NovelInfo, pluginId: string) => {
   // #region getters
 
   const getNovel = useCallback(async () => {
-    let tmpNovel = await getNovelByPath(novelPath, pluginId);
+    let tmpNovel = getNovelByPath(novelPath, pluginId);
     if (!tmpNovel) {
       const sourceNovel = await fetchNovel(pluginId, novelPath).catch(() => {
         throw new Error(getString('updatesScreen.unableToGetNovel'));
       });
 
       await insertNovelAndChapters(pluginId, sourceNovel);
-      tmpNovel = await getNovelByPath(novelPath, pluginId);
+      tmpNovel = getNovelByPath(novelPath, pluginId);
 
       if (!tmpNovel) {
         return;
@@ -231,7 +231,7 @@ export const useNovel = (novelOrPath: string | NovelInfo, pluginId: string) => {
   }, [novelPath, pluginId]);
 
   const getChapters = useCallback(async () => {
-    const page = pages[pageIndex] ?? 1;
+    const page = pages[pageIndex] ?? '1';
 
     if (novel && page) {
       let newChapters: ChapterInfo[] = [];
@@ -244,7 +244,7 @@ export const useNovel = (novelOrPath: string | NovelInfo, pluginId: string) => {
         try {
           newChapters = (await getPageChaptersBatched(...config)) || [];
         } catch (error) {
-          console.error('teaser', error);
+          console.error('Error fetching chapters:', error);
         }
       }
       // Fetch next page if no chapters
@@ -320,7 +320,7 @@ export const useNovel = (novelOrPath: string | NovelInfo, pluginId: string) => {
 
   const loadUpToBatch = useCallback(
     async (targetBatch: number) => {
-      const page = pages[pageIndex];
+      const page = pages[pageIndex] ?? '1';
       if (!novel || !page || targetBatch <= batchInformation.batch) {
         return;
       }
@@ -367,7 +367,7 @@ export const useNovel = (novelOrPath: string | NovelInfo, pluginId: string) => {
 
   const bookmarkChapters = useCallback(
     (_chapters: ChapterInfo[]) => {
-      _chapters.map(_chapter => {
+      _chapters.forEach(_chapter => {
         _bookmarkChapter(_chapter.id);
       });
       mutateChapters(chs =>
@@ -572,11 +572,15 @@ export const useNovel = (novelOrPath: string | NovelInfo, pluginId: string) => {
       }
       setLoading(false);
     } else {
-      getNovel().finally(() => {
-        //? Sometimes loading state changes doesn't trigger rerender causing NovelScreen to be in endless loading state
-        setLoading(false);
-        // getNovel();
-      });
+      getNovel()
+        .catch(() => {
+          // Error is handled - novel stays undefined and loading becomes false
+        })
+        .finally(() => {
+          //? Sometimes loading state changes doesn't trigger rerender causing NovelScreen to be in endless loading state
+          setLoading(false);
+          // getNovel();
+        });
     }
   }, [getNovel, novel]);
 
@@ -591,7 +595,6 @@ export const useNovel = (novelOrPath: string | NovelInfo, pluginId: string) => {
         if (__DEV__) console.error(e);
 
         showToast(e.message);
-        setFetching(false);
       })
       .finally(() => {
         setFetching(false);
@@ -677,7 +680,7 @@ export const deleteCachedNovels = async () => {
       `${NOVEL_PAGE_INDEX_PREFIX}_${novel.pluginId}_${novel.path}`,
     );
     MMKVStorage.delete(
-      `${NOVEL_SETTINSG_PREFIX}_${novel.pluginId}_${novel.path}`,
+      `${NOVEL_SETTINGS_PREFIX}_${novel.pluginId}_${novel.path}`,
     );
     MMKVStorage.delete(`${LAST_READ_PREFIX}_${novel.pluginId}_${novel.path}`);
     const novelDir = NOVEL_STORAGE + '/' + novel.pluginId + '/' + novel.id;
